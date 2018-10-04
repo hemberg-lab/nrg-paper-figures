@@ -1,1 +1,1 @@
-# scfind-paper-figures
+# nrg-paper-figures
