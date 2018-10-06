@@ -1,20 +1,12 @@
 library(SingleCellExperiment)
+library(TSCAN)
+library(destiny)
 library(scater)
-library(cowplot)
-library(statmod)
+library(ggplot2)
 library(ggthemes)
-library(igraph)
-library(cccd)
-library(Matrix)
-library(GGally)
-library(network)
-library(sna)
-library(intergraph)
-library(RColorBrewer)
-library(dendextend)
-source("utils.R")
-
-base_font_size = 10
+library(ggbeeswarm)
+library(corrplot)
+set.seed(1)
 
 deng_SCE <- readRDS("deng-reads.rds")
 deng_SCE$cell_type2 <- as.character(deng_SCE$cell_type2)
@@ -29,67 +21,41 @@ deng_SCE$cell_type2[deng_SCE$cell_type2 == "earlyblast"] <- "Blastocyst"
 deng_SCE$cell_type2[deng_SCE$cell_type2 == "midblast"] <- "Blastocyst"
 deng_SCE$cell_type2[deng_SCE$cell_type2 == "lateblast"] <- "Blastocyst"
 deng_SCE$cell_type2 <- factor(
-  deng_SCE$cell_type2,
-  levels = c("Zygote", "2 cells", "4 cells", "8 cells", "16 cells", "Blastocyst")
+    deng_SCE$cell_type2,
+    levels = c("Zygote", "2 cells", "4 cells", "8 cells", "16 cells", "Blastocyst")
 )
 
-x <- calculateQCMetrics(deng_SCE)
-logcounts(x) <- log2(calculateCPM(x, use_size_factors=FALSE) + 1)
-assay(x, "logcounts_raw") <- log2(counts(x) + 1)
-assay(x, "norm") <- calculateCPM(x, use_size_factors=FALSE)
+logcounts(deng_SCE) <- log2(calculateCPM(deng_SCE, use_size_factors=FALSE) + 1)
 
-x <- runPCA(x, ntop = 500)
+deng_SCE <- runPCA(deng_SCE, ntop = 500)
 
-p1 <- ggplot(as.data.frame(reducedDim(x)), 
-             aes(x = PC1, 
-                 y = PC2,
-                 color = x$cell_type2)) + 
-  geom_point() + 
-  theme_classic(base_size=base_font_size) +
-  scale_color_tableau("colorblind10") +
-  guides(colour=FALSE)
+p1 <- ggplot(as.data.frame(reducedDim(deng_SCE)), 
+       aes(x = PC1, 
+           y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
+  scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
+  ggtitle("500 genes") + guides(colour=FALSE)
 
-dr <- x@reducedDims$PCA
-set.seed(101)
-c1 <- kmeans(dr, centers=5, nstart=100)
+deng_SCE1 <- deng_SCE[, grepl("8cell", rownames(colData(deng_SCE)))]
+deng_SCE1$Protocol <- c(rep("Smart-seq", 28), rep("Smart-seq2", 9))
+deng_SCE1 <- runPCA(deng_SCE1, ntop = 500)
+p3 <- ggplot(as.data.frame(reducedDim(deng_SCE1)), 
+       aes(x = PC1, 
+           y = PC2, colour = deng_SCE1$Protocol)) + geom_point() + theme_classic(base_size=12) + guides(colour=guide_legend(title="Protocol"), size = guide_legend(keywidth = 1))
 
-dat <- as.data.frame(reducedDim(x))
-dat$Cluster <- factor(c1$cluster)
-p2 <- ggplot(dat, 
-             aes(x = PC1, 
-                 y = PC2, color = Cluster)) + geom_point() +
-  scale_colour_brewer(palette = "Set3") +
-  geom_point(data = as.data.frame(c1$centers), color = "black", size = 4, shape = 17) +
-  theme_classic(base_size=base_font_size) + 
-  guides(colour=FALSE)
+deng_SCE <- runPCA(deng_SCE, ntop = 20000)
 
-set.seed(281)
-kNN <- nng(x = dr, k=5)
-adj_knn = get.adjacency(kNN)
-snn <- adj_knn%*%t(adj_knn)
-diag(snn) <- 0
-sNN <- graph.adjacency(snn, mode="undirected")
-sNN <- simplify(sNN)
-louv <- igraph::cluster_louvain(sNN)
-p3 <- ggnet2(sNN, mode = dr, node.size = 1.5, node.color = brewer.pal(9,"Set3")[louv$membership], edge.size = 0.25, edge.color = "black")
+p2 <- ggplot(as.data.frame(reducedDim(deng_SCE)), 
+       aes(x = PC1, 
+           y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
+  scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
+  ggtitle("20000 genes") + guides(colour=guide_legend(title="Cell Type"), size = guide_legend(keywidth = 1))
 
+library(cowplot)
 
-hc <- dend <- dr %>% scale %>% dist %>% hclust
-ord <- order(hc)
-tr <- cutree(hc, k = 5)
+plot_grid(p1, p2, ncol = 2, labels = c("a", "b"), label_size = 20, rel_widths = c(1,1.4))
+ggsave("pdf/fig2.pdf", w = 9, h = 6)
+ggsave("png/fig2.png", w = 9, h = 6)
 
-g <- ggplot_build(p1)
-dend <- dr %>% scale %>% dist %>% 
-  hclust %>% as.dendrogram %>%
-  set("leaves_pch", 19) %>%
-  set("leaves_cex", 2) %>%
-  set("leaves_col", brewer.pal(6,"Set3")[tr][ord]) %>% set("branches_lwd", 0.5) %>%
-  set("labels", rep("", 268))
-
-ggd1 <- as.ggdend(dend)
-p4 <- ggplot(ggd1) 
-
-first_row <-  plot_grid(p1, p2, p3, ncol = 3, labels = c("a", "b", "c"), rel_widths = c(1, 1, 1))
-plot_grid(first_row, p4, ncol = 1, labels = c("", "d"), rel_heights = c(1.2, 1))
-ggsave("fig2.pdf", w = 9, h = 6)
-
+plot_grid(p3)
+ggsave("pdf/fig5.pdf", w = 6, h = 6)
+ggsave("png/fig5.png", w = 6, h = 6)

@@ -109,4 +109,5 @@ first_row <-  plot_grid(p1, arr, p2, arr, p3, arr, ncol = 6, rel_widths = c(1, 0
 second_row <- plot_grid(arr, p4, arr, p5, arr, p6, ncol = 6, rel_widths = c(0.2, 1, 0.2, 1, 0.2, 1))
 
 plot_grid(NULL, first_row, NULL, second_row, NULL, ncol = 1, rel_heights = c(0.1, 1, 0.2, 1, 0.1))
-ggsave("fig1.pdf", w = 9, h = 6)
+ggsave("pdf/fig1.pdf", w = 9, h = 6)
+ggsave("png/fig1.png", w = 9, h = 6)

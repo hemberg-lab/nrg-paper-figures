@@ -1,12 +1,20 @@
 library(SingleCellExperiment)
-library(TSCAN)
-library(destiny)
 library(scater)
-library(ggplot2)
+library(cowplot)
+library(statmod)
 library(ggthemes)
-library(ggbeeswarm)
-library(corrplot)
-set.seed(1)
+library(igraph)
+library(cccd)
+library(Matrix)
+library(GGally)
+library(network)
+library(sna)
+library(intergraph)
+library(RColorBrewer)
+library(dendextend)
+source("utils.R")
+
+base_font_size = 10
 
 deng_SCE <- readRDS("deng-reads.rds")
 deng_SCE$cell_type2 <- as.character(deng_SCE$cell_type2)
@@ -21,53 +29,78 @@ deng_SCE$cell_type2[deng_SCE$cell_type2 == "earlyblast"] <- "Blastocyst"
 deng_SCE$cell_type2[deng_SCE$cell_type2 == "midblast"] <- "Blastocyst"
 deng_SCE$cell_type2[deng_SCE$cell_type2 == "lateblast"] <- "Blastocyst"
 deng_SCE$cell_type2 <- factor(
-    deng_SCE$cell_type2,
-    levels = c("Zygote", "2 cells", "4 cells", "8 cells", "16 cells", "Blastocyst")
+  deng_SCE$cell_type2,
+  levels = c("Zygote", "2 cells", "4 cells", "8 cells", "16 cells", "Blastocyst")
 )
-cellLabels <- deng_SCE$cell_type2
 
-logcounts(deng_SCE) <- log2(calculateCPM(deng_SCE, use_size_factors=FALSE) + 1)
+x <- calculateQCMetrics(deng_SCE)
+logcounts(x) <- log2(calculateCPM(x, use_size_factors=FALSE) + 1)
+assay(x, "logcounts_raw") <- log2(counts(x) + 1)
+assay(x, "norm") <- calculateCPM(x, use_size_factors=FALSE)
 
-deng <- counts(deng_SCE)
-colnames(deng) <- cellLabels
+x <- runPCA(x, ntop = 500)
 
-procdeng <- TSCAN::preprocess(deng)
-colnames(procdeng) <- 1:ncol(deng)
-dengclust <- TSCAN::exprmclust(procdeng, clusternum = 10)
-TSCAN::plotmclust(dengclust)
-dengorderTSCAN <- TSCAN::TSCANorder(dengclust, orderonly = FALSE)
-pseudotime_order_tscan <- as.character(dengorderTSCAN$sample_name)
-deng_SCE$pseudotime_order_tscan <- NA
-deng_SCE$pseudotime_order_tscan[as.numeric(dengorderTSCAN$sample_name)] <- 
-    -dengorderTSCAN$Pseudotime
+p1 <- ggplot(as.data.frame(reducedDim(x)), 
+             aes(x = PC1, 
+                 y = PC2,
+                 color = x$cell_type2)) + 
+  geom_point() + 
+  theme_classic(base_size=base_font_size) +
+  scale_color_tableau("colorblind10") +
+  guides(colour=FALSE)
 
-p1 <- ggplot(as.data.frame(colData(deng_SCE)), 
-       aes(x = pseudotime_order_tscan, 
-           y = cell_type2, colour = cell_type2)) +
-    geom_quasirandom(groupOnX = FALSE) +
-    scale_color_tableau("colorblind10") + theme_classic(base_size = 12) +
-    xlab("Pseudotime") + ylab("Timepoint") +
-  ggtitle("TSCAN") + guides(colour=FALSE)
+dr <- x@reducedDims$PCA
+set.seed(101)
+c1 <- kmeans(dr, centers=5, nstart=100)
 
-deng <- logcounts(deng_SCE)
-colnames(deng) <- cellLabels
-dm <- DiffusionMap(t(deng))
+dat <- as.data.frame(reducedDim(x))
+dat$Cluster <- factor(c1$cluster)
+p2 <- ggplot(dat, 
+             aes(x = PC1, 
+                 y = PC2, color = Cluster)) + geom_point() +
+  scale_colour_brewer(palette = "Set3") +
+  geom_point(data = as.data.frame(c1$centers), color = "black", size = 4, shape = 17) +
+  theme_classic(base_size=base_font_size) + 
+  guides(colour=FALSE)
 
-tmp <- data.frame(DC1 = eigenvectors(dm)[,1],
-                  DC2 = eigenvectors(dm)[,2],
-                  Timepoint = deng_SCE$cell_type2)
+set.seed(281)
+kNN <- nng(x = dr, k=5)
+adj_knn = get.adjacency(kNN)
+snn <- adj_knn%*%t(adj_knn)
+diag(snn) <- 0
+sNN <- graph.adjacency(snn, mode="undirected")
+sNN <- simplify(sNN)
+louv <- igraph::cluster_louvain(sNN)
+p31 <- ggnet2(sNN, mode = dr, node.size = 1.5, node.color = brewer.pal(9,"Set3")[louv$membership], edge.size = 0.25, edge.color = "black")
 
-deng_SCE$pseudotime_diffusionmap <- rank(eigenvectors(dm)[,1])
-p2 <- ggplot(as.data.frame(colData(deng_SCE)), 
-       aes(x = pseudotime_diffusionmap, 
-           y = cell_type2, colour = cell_type2)) +
-    geom_quasirandom(groupOnX = FALSE) +
-    scale_color_tableau("colorblind10") + theme_classic(base_size = 12) +
-    xlab("Pseudotime") +
-    ylab("Timepoint") +
-  ggtitle("Diffusion Map") + guides(colour=FALSE)
+set.seed(281)
+kNN <- nng(x = dr, k=10)
+adj_knn = get.adjacency(kNN)
+snn <- adj_knn%*%t(adj_knn)
+diag(snn) <- 0
+sNN <- graph.adjacency(snn, mode="undirected")
+sNN <- simplify(sNN)
+louv <- igraph::cluster_louvain(sNN)
+p32 <- ggnet2(sNN, mode = dr, node.size = 1.5, node.color = brewer.pal(9,"Set3")[louv$membership], edge.size = 0.25, edge.color = "black")
 
-library(cowplot)
-plot_grid(p1, p2, ncol = 2, labels = c("a", "b"), label_size = 20)
-ggsave("fig3.pdf", w = 9, h = 6)
 
+hc <- dend <- dr %>% scale %>% dist %>% hclust
+ord <- order(hc)
+tr <- cutree(hc, k = 5)
+
+g <- ggplot_build(p1)
+dend <- dr %>% scale %>% dist %>% 
+  hclust %>% as.dendrogram %>%
+  set("leaves_pch", 19) %>%
+  set("leaves_cex", 2) %>%
+  set("leaves_col", brewer.pal(6,"Set3")[tr][ord]) %>% set("branches_lwd", 0.5) %>%
+  set("labels", rep("", 268))
+
+ggd1 <- as.ggdend(dend)
+p4 <- ggplot(ggd1) 
+
+first_row <-  plot_grid(p1, p2, p31, ncol = 3, labels = c("a", "b", "c"), rel_widths = c(1, 1, 1))
+second_row <- plot_grid(p4, p32, ncol = 2, labels = c("e", "d"), rel_widths = c(2, 1))
+plot_grid(first_row, second_row, ncol = 1)
+ggsave("pdf/fig3.pdf", w = 9, h = 6)
+ggsave("png/fig3.png", w = 9, h = 6)

@@ -24,34 +24,51 @@ deng_SCE$cell_type2 <- factor(
     deng_SCE$cell_type2,
     levels = c("Zygote", "2 cells", "4 cells", "8 cells", "16 cells", "Blastocyst")
 )
+cellLabels <- deng_SCE$cell_type2
 
 logcounts(deng_SCE) <- log2(calculateCPM(deng_SCE, use_size_factors=FALSE) + 1)
 
-deng_SCE <- runPCA(deng_SCE, ntop = 500)
+deng <- counts(deng_SCE)
+colnames(deng) <- cellLabels
 
-p1 <- ggplot(as.data.frame(reducedDim(deng_SCE)), 
-       aes(x = PC1, 
-           y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
-  scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
-  ggtitle("500 genes") + guides(colour=FALSE)
+procdeng <- TSCAN::preprocess(deng)
+colnames(procdeng) <- 1:ncol(deng)
+dengclust <- TSCAN::exprmclust(procdeng, clusternum = 10)
+TSCAN::plotmclust(dengclust)
+dengorderTSCAN <- TSCAN::TSCANorder(dengclust, orderonly = FALSE)
+pseudotime_order_tscan <- as.character(dengorderTSCAN$sample_name)
+deng_SCE$pseudotime_order_tscan <- NA
+deng_SCE$pseudotime_order_tscan[as.numeric(dengorderTSCAN$sample_name)] <- 
+    -dengorderTSCAN$Pseudotime
 
-deng_SCE1 <- deng_SCE[, grepl("8cell", rownames(colData(deng_SCE)))]
-deng_SCE1$Protocol <- c(rep("Smart-seq", 28), rep("Smart-seq2", 9))
-deng_SCE1 <- runPCA(deng_SCE1, ntop = 500)
-p3 <- ggplot(as.data.frame(reducedDim(deng_SCE1)), 
-       aes(x = PC1, 
-           y = PC2, colour = deng_SCE1$Protocol)) + geom_point() + theme_classic(base_size=12) + guides(colour=guide_legend(title="Protocol"), size = guide_legend(keywidth = 1))
+p1 <- ggplot(as.data.frame(colData(deng_SCE)), 
+       aes(x = pseudotime_order_tscan, 
+           y = cell_type2, colour = cell_type2)) +
+    geom_quasirandom(groupOnX = FALSE) +
+    scale_color_tableau("colorblind10") + theme_classic(base_size = 12) +
+    xlab("Pseudotime") + ylab("Timepoint") +
+  ggtitle("TSCAN") + guides(colour=FALSE)
 
-deng_SCE <- runPCA(deng_SCE, ntop = 20000)
+deng <- logcounts(deng_SCE)
+colnames(deng) <- cellLabels
+dm <- DiffusionMap(t(deng))
 
-p2 <- ggplot(as.data.frame(reducedDim(deng_SCE)), 
-       aes(x = PC1, 
-           y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
-  scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
-  ggtitle("20000 genes") + guides(colour=guide_legend(title="Cell Type"), size = guide_legend(keywidth = 1))
+tmp <- data.frame(DC1 = eigenvectors(dm)[,1],
+                  DC2 = eigenvectors(dm)[,2],
+                  Timepoint = deng_SCE$cell_type2)
+
+deng_SCE$pseudotime_diffusionmap <- rank(eigenvectors(dm)[,1])
+p2 <- ggplot(as.data.frame(colData(deng_SCE)), 
+       aes(x = pseudotime_diffusionmap, 
+           y = cell_type2, colour = cell_type2)) +
+    geom_quasirandom(groupOnX = FALSE) +
+    scale_color_tableau("colorblind10") + theme_classic(base_size = 12) +
+    xlab("Pseudotime") +
+    ylab("Timepoint") +
+  ggtitle("Diffusion Map") + guides(colour=FALSE)
 
 library(cowplot)
-row1 <- plot_grid(p1, p2, ncol = 2, labels = c("a", "b"), label_size = 20, rel_widths = c(1,1.4))
-row2 <- plot_grid(p3, ncol = 1, labels = c("c"), label_size = 20)
-plot_grid(row1, row2, ncol = 1, rel_heights = c(1.2,1))
-ggsave("fig4.pdf", w = 9, h = 6)
+plot_grid(p1, p2, ncol = 2, labels = c("a", "b"), label_size = 20)
+ggsave("pdf/fig4.pdf", w = 9, h = 6)
+ggsave("png/fig4.png", w = 9, h = 6)
+
