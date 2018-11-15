@@ -100,7 +100,7 @@ ggd1 <- as.ggdend(dend)
 p4 <- ggplot(ggd1) 
 
 first_row <-  plot_grid(p1, p2, p31, ncol = 3, labels = c("a", "b", "c"), rel_widths = c(1, 1, 1))
-second_row <- plot_grid(p4, p32, ncol = 2, labels = c("e", "d"), rel_widths = c(2, 1))
+second_row <- plot_grid(p4, p32, ncol = 2, labels = c("d", "e"), rel_widths = c(2, 1))
 plot_grid(first_row, second_row, ncol = 1)
 ggsave("pdf/fig3.pdf", w = 9, h = 6)
 ggsave("png/fig3.png", w = 9, h = 6)

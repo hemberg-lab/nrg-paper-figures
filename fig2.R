@@ -48,7 +48,7 @@ p2 <- ggplot(as.data.frame(reducedDim(deng_SCE)),
        aes(x = PC1, 
            y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
   scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
-  ggtitle("20000 genes") + guides(colour=guide_legend(title="Cell Type"), size = guide_legend(keywidth = 1))
+  ggtitle("20000 genes") + guides(colour=guide_legend(title="Cell Label"), size = guide_legend(keywidth = 1))
 
 library(cowplot)
 
