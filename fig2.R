@@ -33,14 +33,19 @@ p1 <- ggplot(as.data.frame(reducedDim(deng_SCE)),
        aes(x = PC1, 
            y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
   scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
-  ggtitle("500 genes") + guides(colour=FALSE)
+  ggtitle("500 genes") + guides(colour=FALSE) +
+  xlab(paste("PC1, ", round(attributes(reducedDims(deng_SCE)$PCA)$percentVar[1]*100), "% of variance", sep = "")) +
+  ylab(paste("PC2, ", round(attributes(reducedDims(deng_SCE)$PCA)$percentVar[2]*100), "% of variance", sep = ""))
 
 deng_SCE1 <- deng_SCE[, grepl("8cell", rownames(colData(deng_SCE)))]
 deng_SCE1$Protocol <- c(rep("Smart-seq", 28), rep("Smart-seq2", 9))
 deng_SCE1 <- runPCA(deng_SCE1, ntop = 500)
 p3 <- ggplot(as.data.frame(reducedDim(deng_SCE1)), 
        aes(x = PC1, 
-           y = PC2, colour = deng_SCE1$Protocol)) + geom_point() + theme_classic(base_size=12) + guides(colour=guide_legend(title="Protocol"), size = guide_legend(keywidth = 1))
+           y = PC2, colour = deng_SCE1$Protocol)) + geom_point() + theme_classic(base_size=12) + guides(colour=guide_legend(title="Protocol"), size = guide_legend(keywidth = 1)) +
+  xlab(paste("PC1, ", round(attributes(reducedDims(deng_SCE1)$PCA)$percentVar[1]*100), "% of variance", sep = "")) +
+  ylab(paste("PC2, ", round(attributes(reducedDims(deng_SCE1)$PCA)$percentVar[2]*100), "% of variance", sep = ""))
+
 
 deng_SCE <- runPCA(deng_SCE, ntop = 20000)
 
@@ -48,7 +53,9 @@ p2 <- ggplot(as.data.frame(reducedDim(deng_SCE)),
        aes(x = PC1, 
            y = PC2, colour = deng_SCE$cell_type2)) + geom_point() +
   scale_color_tableau("colorblind10") + theme_classic(base_size=12) +
-  ggtitle("20000 genes") + guides(colour=guide_legend(title="Cell Label"), size = guide_legend(keywidth = 1))
+  ggtitle("20000 genes") + guides(colour=guide_legend(title="Cell Label"), size = guide_legend(keywidth = 1)) +
+  xlab(paste("PC1, ", round(attributes(reducedDims(deng_SCE)$PCA)$percentVar[1]*100), "% of variance", sep = "")) +
+  ylab(paste("PC2, ", round(attributes(reducedDims(deng_SCE)$PCA)$percentVar[2]*100), "% of variance", sep = ""))
 
 library(cowplot)
 
